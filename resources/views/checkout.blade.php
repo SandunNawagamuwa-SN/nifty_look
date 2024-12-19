@@ -95,7 +95,7 @@
                                     </thead>
                                     <tbody>
                                         @php
-                                            $totalPrice = 0;
+                                            $buyPrice = 0;
                                         @endphp
                                         @foreach ($cartItems as $item)
                                             <tr>
@@ -105,7 +105,31 @@
                                                 </td>
                                             </tr>
                                             @php
-                                                $totalPrice += $item->sell_price * $item->quantity;
+                                                $buyPrice += $item->sell_price * $item->quantity;
+                                            @endphp
+                                        @endforeach
+                                    </tbody>
+                                </table>
+                                <table class="checkout-cart-items table table-bordered mb-3">
+                                    <thead>
+                                        <tr>
+                                            <th>RENTAL</th>
+                                            <th class="text-end">SUBTOTAL</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @php
+                                            $rentPrice = 0;
+                                        @endphp
+                                        @foreach ($rentCartItems as $rentItem)
+                                            <tr>
+                                                <td>{{ $rentItem->product_name }} x {{ $rentItem->quantity }}</td>
+                                                <td class="text-end">Rs :
+                                                    {{ number_format($rentItem->rent_price * $rentItem->quantity, 2) }}
+                                                </td>
+                                            </tr>
+                                            @php
+                                                $rentPrice += $rentItem->rent_price * $rentItem->quantity;
                                             @endphp
                                         @endforeach
                                     </tbody>
@@ -117,24 +141,33 @@
                                         <tr>
                                             <th>SUBTOTAL</th>
                                             <td class="text-end">Rs : <span
-                                                    id="sub-total-price">{{ number_format($totalPrice, 2) }}</span></td>
+                                                    id="sub-total-price">{{ number_format($buyPrice + $rentPrice, 2) }}</span>
+                                            </td>
                                         </tr>
                                         <tr>
                                             <th>SHIPPING</th>
                                             <td class="text-end">Free shipping</td>
                                         </tr>
-
+                                        @if ($highestDiscount > 0)
+                                            <tr>
+                                                <th>DISCOUNT ({{ $highestDiscount }}%)</th>
+                                                <td class="text-end">- Rs : <span
+                                                        id="discount-amount">{{ number_format(($highestDiscount)*($buyPrice + $rentPrice)/100, 2) }}</span>
+                                                </td>
+                                            </tr>
+                                        @endif
                                         <tr>
                                             <th>TOTAL</th>
                                             <td class="text-end">Rs : <span
-                                                    id="total-price">{{ number_format($totalPrice, 2) }}</span></td>
+                                                    id="total-price">{{ number_format((100-$highestDiscount)*($buyPrice + $rentPrice)/100, 2) }}</span>
+                                            </td>
                                         </tr>
                                     </tbody>
                                 </table>
 
                                 <!-- Hidden input to hold the total price -->
                                 <input type="hidden" name="total_price" id="total-price-input"
-                                    value="{{ number_format($totalPrice, 2) }}" />
+                                    value="{{ number_format($buyPrice + $rentPrice, 2) }}" />
                             </div>
 
                             <!-- Payment Methods -->
@@ -307,7 +340,8 @@
                     if (data.errors) {
                         let errorMessage = '';
                         for (let field in data.errors) {
-                            errorMessage += `<strong>${field}:</strong> ${data.errors[field].join(', ')}<br>`;
+                            errorMessage +=
+                                `<strong>${field}:</strong> ${data.errors[field].join(', ')}<br>`;
                         }
 
                         Swal.fire({
@@ -344,15 +378,20 @@
 <style>
     /* Custom styling for the SweetAlert confirm button */
     .custom-confirm-btn {
-        background-color: #007bff !important; /* Set your desired color */
-        border-color: #007bff !important;    /* Set border color */
-        color: white !important;              /* Set text color */
+        background-color: #007bff !important;
+        /* Set your desired color */
+        border-color: #007bff !important;
+        /* Set border color */
+        color: white !important;
+        /* Set text color */
         font-weight: bold !important;
-        width: 100px;      /* Optional: Make text bold */
+        width: 100px;
+        /* Optional: Make text bold */
     }
 
     .custom-confirm-btn:hover {
-        background-color: #0056b3 !important; /* Darker blue for hover effect */
+        background-color: #0056b3 !important;
+        /* Darker blue for hover effect */
         border-color: #0056b3 !important;
     }
 </style>

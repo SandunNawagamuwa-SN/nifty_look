@@ -15,7 +15,6 @@ return new class extends Migration
             $table->id();
             $table->string('reference_number')->unique(); // Store the reference number here
             $table->string('customer_name');
-            $table->string('customer_name');
             $table->string('customer_email');
             $table->string('customer_phone')->nullable();
             $table->text('shipping_address');

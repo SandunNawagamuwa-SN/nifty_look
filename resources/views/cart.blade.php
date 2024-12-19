@@ -86,9 +86,74 @@
                         </tbody>
                     </table>
                 </form>
+                <form id="rent-cart-update-form" method="POST">
+                    @csrf
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th scope="col">Rental-Product</th>
+                                <th scope="col">Rental-Price</th>
+                                <th scope="col">Quantity</th>
+                                <th scope="col">Total</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach ($rentCartItems as $rentItem)
+                                <tr>
+                                    <td>
+                                        <div class="media">
+                                            <div class="d-flex">
+                                                {{-- <img src="{{ asset('storage/' . $item->product_image) }}"
+                                                    alt="{{ $item->product_name }}"
+                                                    style="width:200px; height:250px;" /> --}}
+                                                <img src="{{ asset('storage/' . $rentItem->product_image) }}"
+                                                    alt="{{ $rentItem->product_name }}" width="200" height="250"
+                                                    loading="lazy" style="width:200px; height:250px;" />
+                                            </div>
+                                            <div class="media-body">
+                                                <p>{{ $rentItem->product_name }}</p>
+                                            </div>
+                                        </div>
+                                        <div class="pt-4 pb-2 pl-2">
+                                            <h4>Size: {{ $rentItem->size }}</h4>
+                                            <h4>Color: {{ $rentItem->color }}</h4>
+                                            <h4>Description: {{ $rentItem->description }}</h4>
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <h5>Rs:{{ number_format($rentItem->rent_price, 2) }}</h5>
+                                    </td>
+                                    <td>
+                                        <div class="product_count">
+                                            <input type="hidden" name="item_ids[]" value="{{ $rentItem->id }}" />
+                                            <input type="text" name="quantities[]" id="ssr-{{ $rentItem->id }}"
+                                                maxlength="12" value="{{ $rentItem->quantity }}" title="Quantity:"
+                                                class="input-text qty"
+                                                oninput="updateTotalPrice({{ $rentItem->id }}, {{ $rentItem->rent_price }})" />
+                                            <button
+                                                onclick="var result = document.getElementById('ssr-{{ $rentItem->id }}'); var ssr = result.value; if( !isNaN( ssr )) { result.value++; updateTotalPrice({{ $rentItem->id }}, {{ $rentItem->rent_price }}); } return false;"
+                                                class="increase rent-items-count" type="button">
+                                                <i class="lnr lnr-chevron-up"></i>
+                                            </button>
+                                            <button
+                                                onclick="var result = document.getElementById('ssr-{{ $rentItem->id }}'); var ssr = result.value; if( !isNaN( ssr ) && ssr > 0 ) { result.value--; updateTotalPrice({{ $rentItem->id }}, {{ $rentItem->rent_price }}); } return false;"
+                                                class="reduced rent-items-count" type="button">
+                                                <i class="lnr lnr-chevron-down"></i>
+                                            </button>
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <h5 id="totalr-{{ $rentItem->id }}">
+                                            Rs:{{ number_format($rentItem->rent_price * $rentItem->quantity, 2) }}</h5>
+                                    </td>
+                                </tr>
+                            @endforeach
+                        </tbody>
+                    </table>
+                </form>
             </div>
             <div>
-                <form id="checkout-form" method="GET" action="{{ route('checkout') }}"
+                <form id="checkout-form" method="POST" action="{{ route('checkout') }}"
                     class="container p-4 border border-info rounded">
                     @csrf
 
@@ -110,7 +175,6 @@
                         <button type="submit" class="btn btn-primary">Proceed to Checkout</button>
                     </div>
                 </form>
-
             </div>
         </div>
     </div>
@@ -153,6 +217,46 @@
         const quantity = document.getElementById('sst-' + id).value;
         const total = price * quantity;
         document.getElementById('total-' + id).innerText = '$' + total.toFixed(2);
+    }
+
+</script>
+
+<script>
+    const rentQuantityChangeButtons = document.getElementsByClassName('rent-items-count');
+
+    Array.from(rentQuantityChangeButtons).forEach(button => {
+        button.addEventListener('click', function(e) {
+            console.log('rent-items-count')
+            e.preventDefault();
+
+            const formData = new FormData(document.getElementById('rent-cart-update-form'));
+
+            fetch('{{ route('rent.update') }}', {
+                    method: 'POST',
+                    body: formData,
+                    headers: {
+                        'X-CSRF-TOKEN': '{{ csrf_token() }}',
+                    }
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        swal("Success!", data.message, "success");
+                    } else {
+                        swal("Error!", "There was an issue updating your cart.", "error");
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    swal("Error!", "There was an issue with your request.", "error");
+                });
+        });
+    });
+
+    function updateTotalPrice(id, price) {
+        const quantity = document.getElementById('ssr-' + id).value;
+        const total = price * quantity;
+        document.getElementById('totalr-' + id).innerText = '$' + total.toFixed(2);
     }
 
 </script>

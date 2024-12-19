@@ -4,14 +4,18 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use App\Models\Product;
+use App\Models\Productst;
 use Illuminate\Support\Facades\DB;
 use App\Models\User;
 use App\Models\Cart;
+use App\Models\RentCart;
+use App\Models\Rent;
 use App\Models\Wishlist;
 use App\Models\Supplier;
 use App\Models\Admin;
 use App\Models\Order;
 use App\Models\OrderItem;
+use App\Models\SeasonalDiscount;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
@@ -171,13 +175,18 @@ class HomeController extends Controller
 
     public function showCart()
     {
-
         $cartItems = Cart::where('user_id', Auth::id())
             ->where('checkout', false)
             ->where('quantity', '>', 0)
             ->get();
 
-        return view('cart', compact('cartItems'));
+        $rentCartItems = RentCart::where('user_id', Auth::id())
+            ->where('checkout', false)
+            ->where('quantity', '>', 0)
+            ->get();
+        Log::info('cart-item update - ' . $cartItems);
+        Log::info('rent-cart-item update - ' . $rentCartItems);
+        return view('cart', compact('cartItems', 'rentCartItems'));
     }
 
     public function myAccount()
@@ -374,8 +383,19 @@ class HomeController extends Controller
             ->where('checkout', false)
             ->where('quantity', '>', 0)
             ->get();
-
-        return view('checkout', compact('cartItems'));
+        $rentCartItems = RentCart::where('user_id', Auth::id())
+            ->where('checkout', false)
+            ->where('quantity', '>', 0)
+            ->get();
+        $orderDate = now();
+        $discounts = SeasonalDiscount::where('discount_from', '<=', $orderDate)
+            ->where('discount_to', '>=', $orderDate)
+            ->get();
+        $highestDiscount = $discounts->max('discount_percentage');
+        Log::info('highest-discount ' . $highestDiscount);
+        Log::info('cart-item update - ' . $cartItems);
+        Log::info('rent-cart-item update - ' . $rentCartItems);
+        return view('checkout', compact('cartItems', 'rentCartItems','highestDiscount'));
     }
 
     public function placeOrder(Request $request)
@@ -408,8 +428,24 @@ class HomeController extends Controller
         ]);
 
         try {
-
             DB::beginTransaction();
+
+            $orderDate = now();
+
+            $discounts = SeasonalDiscount::where('discount_from', '<=', $orderDate)
+                ->where('discount_to', '>=', $orderDate)
+                ->get();
+
+            $highestDiscount = $discounts->max('discount_percentage');
+
+            $totalAmount = (float) str_replace(',', '', $request->total_price);
+
+            $discountAmount = 0;
+
+            if ($highestDiscount) {
+                $discountAmount = ($highestDiscount / 100) * $totalAmount;
+                $totalAmount -= $discountAmount;  // Apply discount to total amount
+            }
 
             $order = Order::create([
                 'customer_name'    => $request->name,
@@ -417,6 +453,8 @@ class HomeController extends Controller
                 'customer_phone'   => $request->phone,
                 'shipping_address' => $shipping_address,
                 'total_amount'     => (float) str_replace(',', '', $request->total_price),
+                'discount'         => $discountAmount,
+                'payment'          => $totalAmount,
                 'status'           => 'completed',
             ]);
 
@@ -426,28 +464,88 @@ class HomeController extends Controller
 
             foreach ($cartItems as $item) {
                 if ($item['quantity'] > 0) {
-                    OrderItem::create([
-                        'order_id'     => $order->id,
-                        'product_name' => $item['product_name'],
-                        'quantity'     => $item['quantity'],
-                        'price'        => $item['sell_price'],
-                        'subtotal'     => $item['quantity'] * $item['sell_price'],
-                    ]);
 
                     $product = Product::find($item['product_id']);
                     if ($product) {
-                        $product->stock_quantity -= $item['quantity'];
-
-                        if ($product->stock_quantity < 0) {
-                            $product->stock_quantity = 0;
+                        // Check if stock quantity is sufficient
+                        if ($product->stock_quantity < $item['quantity']) {
+                            // Return error message
+                            return back()->withErrors([
+                                'stock_error' => "The requested quantity for {$product->product_name} is not available in stock.",
+                            ]);
                         }
 
+                        // Deduct quantity from stock
+                        $product->stock_quantity -= $item['quantity'];
                         $product->save();
+
+                        $subtotal = $item['quantity'] * $item['sell_price'];
+
+                        if ($highestDiscount) {
+                            $discountAmount = ($highestDiscount / 100) * $subtotal;
+                            $subtotal -= $discountAmount;  // Apply discount to total amount
+                        }
+
+                        // Create OrderItem
+                        OrderItem::create([
+                            'order_id'     => $order->id,
+                            'item_id'      => $product['reference_number'],
+                            'quantity'     => $item['quantity'],
+                            'price'        => $item['sell_price'],
+                            'subtotal'     => $subtotal,
+                        ]);
                     }
                 }
             }
 
             Cart::whereIn('id', $cartItems->pluck('id'))
+                ->update(['checkout' => true]);
+
+            Log::info('place-order2');
+
+            $rentCartItems = RentCart::where('user_id', Auth::id())
+                ->where('checkout', false)
+                ->get();
+
+            Log::info($rentCartItems);
+
+            foreach ($rentCartItems as $rentItem) {
+                if ($rentItem['quantity'] > 0) {
+
+                    $rent = Rent::find($rentItem['rent_id']);
+                    if ($rent) {
+                        // Check if available quantity is sufficient
+                        if ($rent->available_quantity < $rentItem['quantity']) {
+                            // Return error message
+                            return back()->withErrors([
+                                'rent_stock_error' => "The requested quantity for rental item {$rent->product_name} is not available in stock.",
+                            ]);
+                        }
+
+                        // Deduct quantity from available stock
+                        $rent->available_quantity -= $rentItem['quantity'];
+                        $rent->save();
+
+                        $rent_subtotal = $rentItem['quantity'] * $rentItem['rent_price'];
+
+                        if ($highestDiscount) {
+                            $discountAmount = ($highestDiscount / 100) * $rent_subtotal;
+                            $rent_subtotal -= $discountAmount;  // Apply discount to total amount
+                        }
+
+                        // Create OrderItem
+                        OrderItem::create([
+                            'order_id'     => $order->id,
+                            'item_id'      => $rent['reference_number'],
+                            'quantity'     => $rentItem['quantity'],
+                            'price'        => $rentItem['rent_price'],
+                            'subtotal'     => $rent_subtotal,
+                        ]);
+                    }
+                }
+            }
+
+            RentCart::whereIn('id', $rentCartItems->pluck('id'))
                 ->update(['checkout' => true]);
 
             DB::commit();
@@ -457,7 +555,7 @@ class HomeController extends Controller
                 'message' => 'Order created successfully with items.',
                 'order_refno' => $order->reference_number,
                 'order_date' => $order->created_at,
-                'total_amount' => $order->total_amount,
+                'total_amount' => $order->payment,
                 'data' => $order->load('items')
             ], 201);
         } catch (\Exception $e) {
@@ -471,5 +569,33 @@ class HomeController extends Controller
                 'error'   => $e->getMessage()
             ], 500);
         }
+    }
+    public function create_seasonal_offer()
+    {
+        $discounts = SeasonalDiscount::all();  // This fetches all discounts
+
+        // Pass the discounts to the view
+        return view('admin.add_seasonal_offer', compact('discounts'));
+    }
+
+    public function store_seasonal_offer(Request $request)
+    {
+        $validated = $request->validate([
+            'discount_from' => 'required|date|before_or_equal:discount_to',
+            'discount_to' => 'required|date|after_or_equal:discount_from',
+            'discount_name' => 'required|string|max:255',
+            'discount_percentage' => 'required|numeric|min:0.01|max:99.99',
+        ]);
+        SeasonalDiscount::create($validated);
+        return response()->json(['message' => 'Supplier added successfully!'], 200);
+    }
+
+
+    public function destroyDiscount($id)
+    {
+        $discount = SeasonalDiscount::findOrFail($id);
+        $discount->delete();
+
+        return response()->json(['message' => 'Discount deleted successfully!'], 200);
     }
 }

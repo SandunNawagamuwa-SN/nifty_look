@@ -5,20 +5,18 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
-class Cart extends Model
+class RentCart extends Model
 {
     use HasFactory;
 
-    protected $table = 'cart';
+    protected $table = 'rents_cart';
 
     protected $fillable = [
         'user_id',
-        'product_id',
+        'rent_id',
         'product_name',
         'category',
-        'buy_price',
-        'sell_price',
-        'old_price',
+        'rent_price',
         'stock_quantity',
         'size',
         'color',
@@ -29,8 +27,5 @@ class Cart extends Model
         'checkout'
     ];
 
-
     public $timestamps = true;
-
-
 }

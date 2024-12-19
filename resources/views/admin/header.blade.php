@@ -193,9 +193,23 @@
 
                             </ul>
                         </li>
-
+                        <li class="submenu">
+                            <a href="javascript:void(0);">
+                                <img src="{{ asset('assets/img/icons/product.svg') }}" alt="img">
+                                <span> Discounts</span>
+                                <span class="menu-arrow"></span>
+                            </a>
+                            <ul>
+                                <!-- Use route or url helpers properly -->
+                                <li>
+                                    <a href="{{ url('admin/seasonal-discounts/add') }}"
+                                        class="{{ request()->is('admin/seasonal-discounts/add') ? 'active' : '' }}">
+                                        Seasonal Offers
+                                    </a>
+                                </li>
+                            </ul>
+                        </li>
                     </ul>
-
                 </div>
             </div>
         </div>
